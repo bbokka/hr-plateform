@@ -1,13 +1,15 @@
 from pathlib import Path
-from pypdf import PdfReader
+import pymupdf  # PyMuPDF
 from docx import Document
 
 def extract_text_from_cv(file_path: str) -> str:
     ext = Path(file_path).suffix.lower()
 
     if ext == ".pdf":
-        reader = PdfReader(file_path)
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        doc = pymupdf.open(file_path)
+        text = "\n".join(page.get_text() for page in doc)
+        doc.close()
+        return text
 
     elif ext == ".docx":
         doc = Document(file_path)

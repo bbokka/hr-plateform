@@ -7,6 +7,7 @@ import shutil
 import uuid
 from pathlib import Path
 from services.cv_extraction import extract_text_from_cv
+from services.cv_parser import parse_cv
 
 
 UPLOAD_DIR = Path("uploads")
@@ -67,14 +68,17 @@ def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Dep
         shutil.copyfileobj(file.file, f)
 
     raw_text = extract_text_from_cv(str(file_path))
+    parsed_data = parse_cv(raw_text)
 
     candidate.cv_file_path = str(file_path)
     candidate.cv_raw_text = raw_text
+    candidate.cv_parsed_data = parsed_data
     db.commit()
     db.refresh(candidate)
 
     return {
         "candidate_id": candidate.id,
         "cv_file_path": candidate.cv_file_path,
-        "cv_raw_text_preview": raw_text[:200]
+        "cv_raw_text_preview": raw_text[:200],
+        "cv_parsed_data": candidate.cv_parsed_data,
     }

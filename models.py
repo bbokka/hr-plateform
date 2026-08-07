@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
 from sqlalchemy.sql import func
 from database import Base
+
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -19,3 +20,4 @@ class Candidate(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     cv_file_path = Column(String, nullable=True)
     cv_raw_text = Column(Text, nullable=True)
+    cv_parsed_data = Column(JSON, nullable=True)
