@@ -137,12 +137,21 @@ def extract_skills(doc) -> list[str]:
     return seen
 
 
+def _looks_like_noise(text: str) -> bool:
+    """Filter obvious NER misfires: bullet fragments, sentence-like ORG spans."""
+    return (
+        text.startswith(("•", "-"))
+        or len(text.split()) > 6          # real company/location names are rarely 7+ words
+        or "\n" in text
+    )
+
+
 def extract_entities(doc, labels: tuple[str, ...]) -> list[str]:
     seen = []
     for ent in doc.ents:
         if ent.label_ in labels:
             value = ent.text.strip()
-            if value and value not in seen:
+            if value and value not in seen and not _looks_like_noise(value):
                 seen.append(value)
     return seen
 
@@ -208,20 +217,3 @@ if __name__ == "__main__":
     result = parse_cv_file(sys.argv[1])
     print(json.dumps(result, indent=2, ensure_ascii=False))
     print(f"\n({SOURCE_URL})")
-
-def _looks_like_noise(text: str) -> bool:
-    """Filter obvious NER misfires: bullet fragments, sentence-like ORG spans."""
-    return (
-        text.startswith(("•", "-"))
-        or len(text.split()) > 6          # real company names are rarely 7+ words
-        or "\n" in text
-    )
-
-def extract_entities(doc, labels: tuple[str, ...]) -> list[str]:
-    seen = []
-    for ent in doc.ents:
-        if ent.label_ in labels:
-            value = ent.text.strip()
-            if value and value not in seen and not _looks_like_noise(value):
-                seen.append(value)
-    return seen
