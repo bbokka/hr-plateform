@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
 from sqlalchemy.sql import func
 from database import Base
+from pgvector.sqlalchemy import Vector
 
 
 class Job(Base):
@@ -10,6 +11,7 @@ class Job(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    embedding = Column(Vector(384), nullable=True)
 
 class Candidate(Base):
     __tablename__ = "candidates"
@@ -21,3 +23,4 @@ class Candidate(Base):
     cv_file_path = Column(String, nullable=True)
     cv_raw_text = Column(Text, nullable=True)
     cv_parsed_data = Column(JSON, nullable=True)
+    embedding = Column(Vector(384), nullable=True)  

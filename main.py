@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from services.cv_extraction import extract_text_from_cv
 from services.cv_parser import parse_cv
+from services.embedding_service import embed_text, build_candidate_embedding_text
 
 
 UPLOAD_DIR = Path("uploads")
@@ -25,6 +26,7 @@ def health():
 @app.post("/jobs")
 def create_job(job: JobCreate, db: Session = Depends(get_db)):
     new_job = Job(title=job.title, description=job.description)
+    new_job.embedding = embed_text(job.description)
     db.add(new_job)
     db.commit()
     db.refresh(new_job)
@@ -70,6 +72,9 @@ def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Dep
     raw_text = extract_text_from_cv(str(file_path))
     parsed_data = parse_cv(raw_text)
 
+    embedding_text = build_candidate_embedding_text(raw_text, parsed_data)
+    candidate.embedding = embed_text(embedding_text)
+
     candidate.cv_file_path = str(file_path)
     candidate.cv_raw_text = raw_text
     candidate.cv_parsed_data = parsed_data
@@ -82,3 +87,33 @@ def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Dep
         "cv_raw_text_preview": raw_text[:200],
         "cv_parsed_data": candidate.cv_parsed_data,
     }
+
+@app.get("/jobs/{job_id}/matches")
+def get_job_matches(job_id: int, limit: int = 5, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.embedding is None:
+        raise HTTPException(status_code=400, detail="Job has no embedding yet")
+
+    candidates = (
+        db.query(
+            Candidate,
+            Candidate.embedding.cosine_distance(job.embedding).label("distance")
+        )
+        .filter(Candidate.embedding.isnot(None))
+        .order_by("distance")
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "candidate_id": c.Candidate.id,
+            "full_name": c.Candidate.full_name,
+            "email": c.Candidate.email,
+            "similarity_score": round(1 - c.distance, 4),  # convert distance to similarity: 1 = perfect match
+            "skills": (c.Candidate.cv_parsed_data or {}).get("skills", []),
+        }
+        for c in candidates
+    ]
