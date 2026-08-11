@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -14,6 +15,14 @@ from services.embedding_service import embed_text, build_candidate_embedding_tex
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class JobCreate(BaseModel):
     title: str
@@ -36,6 +45,13 @@ def create_job(job: JobCreate, db: Session = Depends(get_db)):
 def list_jobs(db: Session = Depends(get_db)):
     return db.query(Job).all()
 
+@app.get("/jobs/{job_id}")
+def get_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
 
 class CandidateCreate(BaseModel):
     full_name: str
@@ -52,6 +68,13 @@ def create_candidate(candidate: CandidateCreate, db: Session = Depends(get_db)):
 @app.get("/candidates")
 def list_candidates(db: Session = Depends(get_db)):
     return db.query(Candidate).all()
+
+@app.get("/candidates/{candidate_id}")
+def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return candidate
 
 @app.post("/candidates/{candidate_id}/cv")
 def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):

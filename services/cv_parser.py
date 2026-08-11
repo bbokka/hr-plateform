@@ -41,12 +41,47 @@ DEGREE_PHRASES = [
 
 SCHOOL_KEYWORDS = [
     "University", "College", "Institute of Technology", "Academy",
-    "School of Engineering", "School of Business", "Polytechnic",
+    "School of Engineering", "School of Business", "School of Design",
+    "Polytechnic",
 ]
+
+# The Jobzilla taxonomy includes very generic single-word "skills" (e.g.
+# "design", "business", "testing") that also legitimately appear inside
+# unrelated company or school names ("Rhode Island School of Design",
+# "Feast and Co."). Because skills_ruler runs before core NER with
+# overwrite_ents=True, it greedily claims these single words wherever they
+# appear -- fragmenting what should have been one clean ORG/EDUCATION span
+# and leaving noisy leftover fragments for NER to guess at. Excluding
+# overly generic single-word patterns fixes the fragmentation and also
+# improves the quality of the skills list itself (these words carry near
+# -zero signal as standalone "skills" anyway).
+GENERIC_SKILL_BLOCKLIST = {
+    "design", "business", "testing", "support", "software", "engineering",
+    "mobile", "commerce", "interaction", "workflow", "framework",
+    "algorithms", "monitoring", "server", "management", "development",
+    "solutions", "systems", "operations", "strategy", "analysis",
+    "research", "planning", "reporting", "documentation", "training",
+    "leadership", "communication", "presentation", "writing", "editing",
+    "languages", "testing",
+}
+
+
+def _pattern_text(pattern) -> str:
+    """Reconstruct the plain-text phrase a spaCy pattern matches, for
+    blocklist comparison. Handles both string patterns and token-dict list
+    patterns (the format the Jobzilla dataset actually uses)."""
+    if isinstance(pattern, str):
+        return pattern.lower().strip()
+    tokens = []
+    for tok in pattern:
+        value = tok.get("LOWER") or tok.get("TEXT") or tok.get("lower") or ""
+        tokens.append(str(value))
+    return " ".join(tokens).strip()
 
 
 def _load_skill_patterns() -> list[dict]:
-    """Load the jobzilla skill taxonomy (real dataset) as EntityRuler patterns."""
+    """Load the jobzilla skill taxonomy (real dataset) as EntityRuler patterns,
+    excluding overly generic single-word terms (see GENERIC_SKILL_BLOCKLIST)."""
     if not SKILLS_FILE.exists():
         from scripts.download_skills import download_skills
         download_skills()
@@ -60,9 +95,15 @@ def _load_skill_patterns() -> list[dict]:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if "pattern" not in entry or not entry["pattern"]:
+        pattern = entry.get("pattern")
+        if not pattern:
             continue
-        patterns.append({"label": "SKILL", "pattern": entry["pattern"]})
+
+        text = _pattern_text(pattern)
+        if len(text.split()) == 1 and text in GENERIC_SKILL_BLOCKLIST:
+            continue
+
+        patterns.append({"label": "SKILL", "pattern": pattern})
     return patterns
 
 
@@ -137,13 +178,40 @@ def extract_skills(doc) -> list[str]:
     return seen
 
 
+TRAILING_NOISE_WORDS = {"and", "of", "the", "with", "&", "in", "for", "to", "at"}
+
+# Short 2-letter tokens are almost never real company/location names on
+# their own (they're usually leftover fragments like "TX", "UI") -- but a
+# few short, well-known real-world abbreviations are legitimate, so we
+# allowlist those rather than banning all short strings outright.
+SHORT_ENTITY_ALLOWLIST = {"ibm", "aws", "gcp", "hp", "ge", "3m", "bp", "ea"}
+
+
 def _looks_like_noise(text: str) -> bool:
-    """Filter obvious NER misfires: bullet fragments, sentence-like ORG spans."""
-    return (
-        text.startswith(("•", "-"))
-        or len(text.split()) > 6          # real company/location names are rarely 7+ words
-        or "\n" in text
-    )
+    """Filter obvious NER misfires: bullet fragments, sentence-like ORG
+    spans, and truncated fragments left over after skills_ruler consumed
+    part of the original entity (see GENERIC_SKILL_BLOCKLIST above)."""
+    words = text.split()
+
+    if text.startswith(("•", "-")):
+        return True
+    if len(words) > 6:          # real company/location names are rarely 7+ words
+        return True
+    if "\n" in text:
+        return True
+    if len(text) < 3:
+        return True
+    # Truncated entity: ends in a stray conjunction/preposition, e.g.
+    # "Rhode Island School of" or "Feast and" after "Design"/"AI" got
+    # peeled off by skills_ruler.
+    if words and words[-1].lower().strip(",.") in TRAILING_NOISE_WORDS:
+        return True
+    # Short all-caps fragments ("TX", "UI") are usually noise unless on
+    # the allowlist of real short abbreviations.
+    if len(words) == 1 and len(text) <= 3 and text.lower() not in SHORT_ENTITY_ALLOWLIST:
+        return True
+
+    return False
 
 
 def extract_entities(doc, labels: tuple[str, ...]) -> list[str]:
