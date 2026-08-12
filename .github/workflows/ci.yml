@@ -10,6 +10,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: ${{ secrets.DB_URL_TEST }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
