@@ -2,11 +2,11 @@
 
 Usage:
     1. Make sure your FastAPI server is running (uvicorn main:app --reload)
-    2. Drop a few real CV files (PDF/DOCX) into a folder, e.g. sample_cvs/
+    2. Place CV files in sample_cvs/ (already matched below by filename)
     3. Run: python scripts/seed_demo_data.py
 
-This hits the real running API over HTTP — same code path a real user would
-trigger — so it exercises extraction, parsing, and embedding end-to-end,
+This hits the real running API over HTTP -- same code path a real user would
+trigger -- so it exercises extraction, parsing, and embedding end-to-end,
 just without manual clicking.
 """
 import sys
@@ -45,18 +45,42 @@ DEMO_JOBS = [
             "experience to build modern, accessible web interfaces."
         ),
     },
+    {
+        "title": "Data Scientist",
+        "description": (
+            "Data scientist role focused on machine learning, NLP, and "
+            "predictive modeling using Python, PyTorch, and SQL."
+        ),
+    },
+    {
+        "title": "UX/UI Designer",
+        "description": (
+            "UX/UI designer with strong Figma skills, experience running "
+            "user research, wireframing, and building design systems."
+        ),
+    },
 ]
 
-DEMO_CANDIDATES = [
-    {"full_name": "Alice Martin", "email": "alice.martin@example.com"},
-    {"full_name": "Byungjin Park", "email": "byungjin.park@example.com"},
-    {"full_name": "Carlos Ruiz", "email": "carlos.ruiz@example.com"},
-]
-
-# Folder containing real CV files to upload — matched to DEMO_CANDIDATES by index.
-# If there are fewer CVs than candidates, remaining candidates are created
-# without a CV (useful for testing the "no CV yet" empty state too).
+# Explicit filename -> candidate mapping. This is deliberate instead of
+# relying on alphabetical folder order, which previously caused a mismatch
+# (David Chen's CV silently landed on the "Byungjin Park" candidate record
+# because it happened to sort second in the folder).
 CV_FOLDER = Path("sample_cvs")
+
+CANDIDATE_CV_MAP = [
+    {"full_name": "Alex Morgan", "email": "alex.morgan@example.com",
+     "cv_file": "Alex_Morgan_Software_Engineer_CV.pdf"},
+    {"full_name": "David Chen", "email": "david.chen.ai@example.com",
+     "cv_file": "David_Chen_Data_Scientist_CV.pdf"},
+    {"full_name": "Elena Rostova", "email": "elena.rostova.design@example.com",
+     "cv_file": "Elena_Rostova_UX_UI_Designer_CV.pdf"},
+    {"full_name": "Byungjin Park", "email": "byungjin.park@example.com",
+     "cv_file": "resume.pdf"},
+    {"full_name": "Sarah Jenkins", "email": "sarah.jenkins@example.com",
+     "cv_file": "Sarah_Jenkins_Marketing_Director_CV.pdf"},
+    {"full_name": "aziz BenAmor", "email": "AzizBenAmor@example.com",
+     "cv_file": "test_CV.pdf"},
+]
 
 
 def seed_jobs():
@@ -71,32 +95,35 @@ def seed_jobs():
 
 def seed_candidates():
     print("\nSeeding candidates...")
-    cv_files = sorted(CV_FOLDER.glob("*")) if CV_FOLDER.exists() else []
 
-    for i, candidate in enumerate(DEMO_CANDIDATES):
-        resp = requests.post(f"{API_BASE}/candidates", json=candidate)
+    for entry in CANDIDATE_CV_MAP:
+        resp = requests.post(f"{API_BASE}/candidates", json={
+            "full_name": entry["full_name"],
+            "email": entry["email"],
+        })
         if resp.status_code != 200:
-            print(f"  FAILED to create candidate '{candidate['full_name']}': "
+            print(f"  FAILED to create candidate '{entry['full_name']}': "
                   f"{resp.status_code} {resp.text}")
             continue
 
         candidate_id = resp.json()["id"]
-        print(f"  Created candidate: {candidate['full_name']} (id={candidate_id})")
+        print(f"  Created candidate: {entry['full_name']} (id={candidate_id})")
 
-        if i < len(cv_files):
-            cv_path = cv_files[i]
-            with open(cv_path, "rb") as f:
-                upload_resp = requests.post(
-                    f"{API_BASE}/candidates/{candidate_id}/cv",
-                    files={"file": (cv_path.name, f)},
-                )
-            if upload_resp.status_code == 200:
-                print(f"    Uploaded CV: {cv_path.name}")
-            else:
-                print(f"    FAILED to upload CV for {candidate['full_name']}: "
-                      f"{upload_resp.status_code} {upload_resp.text}")
+        cv_path = CV_FOLDER / entry["cv_file"]
+        if not cv_path.exists():
+            print(f"    WARNING: expected CV file not found: {cv_path} — skipped")
+            continue
+
+        with open(cv_path, "rb") as f:
+            upload_resp = requests.post(
+                f"{API_BASE}/candidates/{candidate_id}/cv",
+                files={"file": (cv_path.name, f)},
+            )
+        if upload_resp.status_code == 200:
+            print(f"    Uploaded CV: {cv_path.name}")
         else:
-            print(f"    (no CV file available for this candidate — skipped)")
+            print(f"    FAILED to upload CV for {entry['full_name']}: "
+                  f"{upload_resp.status_code} {upload_resp.text}")
 
 
 def check_server():
@@ -113,9 +140,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if not CV_FOLDER.exists():
-        print(f"NOTE: '{CV_FOLDER}/' folder not found — candidates will be created "
-              f"without CVs. Create this folder and add a few PDF/DOCX files to "
-              f"also test the upload/parsing pipeline.\n")
+        print(f"ERROR: '{CV_FOLDER}/' folder not found.")
+        sys.exit(1)
 
     seed_jobs()
     seed_candidates()

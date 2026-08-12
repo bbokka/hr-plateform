@@ -11,7 +11,7 @@ def test_extract_email_returns_none_when_missing():
 
 
 def test_extract_phone_finds_us_format():
-    text = "Call me at (555) 123-4567 anytime."
+    text = "Call me at (202) 867-5309 anytime."
     assert extract_phone(text) is not None
 
 
