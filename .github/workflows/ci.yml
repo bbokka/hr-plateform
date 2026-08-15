@@ -27,6 +27,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_platform_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_platform_test
 
     steps:
       - name: Checkout code
