@@ -36,6 +36,34 @@ export interface JobMatch {
   email: string;
   similarity_score: number;
   skills: string[];
+  application_id: number | null;
+  application_status: string | null;
+}
+
+export interface Application {
+  id: number;
+  candidate_id: number;
+  job_id: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApplicationStatusHistoryEntry {
+  id: number;
+  application_id: number;
+  status: string;
+  changed_at: string;
+}
+
+export interface JobApplicationSummary {
+  application_id: number;
+  candidate_id: number;
+  full_name: string;
+  email: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CVUploadResponse {

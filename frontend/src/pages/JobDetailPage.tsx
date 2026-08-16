@@ -101,14 +101,17 @@ export default function JobDetailPage() {
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-44 pr-5">
                     Match Score
                   </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-48 pr-5">
+                    Pipeline
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {matchesLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={4} />)
+                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={5} />)
                 ) : matches.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       <EmptyState
                         title="No matches yet"
                         description="Add candidates and upload their CVs to start matching them against this job."
@@ -117,7 +120,13 @@ export default function JobDetailPage() {
                   </tr>
                 ) : (
                   matches.map((match, i) => (
-                    <JobMatchRow key={match.candidate_id} match={match} rank={i + 1} />
+                    <JobMatchRow
+                      key={match.candidate_id}
+                      match={match}
+                      rank={i + 1}
+                      jobId={jobId}
+                      onRefresh={fetchMatches}
+                    />
                   ))
                 )}
               </tbody>
