@@ -25,9 +25,20 @@ jobs:
           --health-timeout=5s
           --health-retries=5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_platform_test
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_platform_test
+      REDIS_URL: redis://localhost:6379/0
 
     steps:
       - name: Checkout code
@@ -47,5 +58,12 @@ jobs:
       - name: Run Alembic migrations
         run: alembic upgrade head
 
+      - name: Start Celery worker in background
+        run: celery -A celery_app worker --loglevel=info --detach --pidfile=celery.pid
+
       - name: Run tests
         run: pytest tests/ -v
+
+      - name: Stop Celery worker
+        if: always()
+        run: celery -A celery_app control shutdown || true

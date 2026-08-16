@@ -24,3 +24,5 @@ class Candidate(Base):
     cv_raw_text = Column(Text, nullable=True)
     cv_parsed_data = Column(JSON, nullable=True)
     embedding = Column(Vector(384), nullable=True)  
+    processing_status = Column(String, default="pending", nullable=False)
+    processing_error = Column(String, nullable=True)

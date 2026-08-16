@@ -10,7 +10,7 @@ from pathlib import Path
 from services.cv_extraction import extract_text_from_cv
 from services.cv_parser import parse_cv
 from services.embedding_service import embed_text, build_candidate_embedding_text
-
+from tasks import process_cv
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -92,23 +92,18 @@ def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Dep
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    raw_text = extract_text_from_cv(str(file_path))
-    parsed_data = parse_cv(raw_text)
-
-    embedding_text = build_candidate_embedding_text(raw_text, parsed_data)
-    candidate.embedding = embed_text(embedding_text)
-
     candidate.cv_file_path = str(file_path)
-    candidate.cv_raw_text = raw_text
-    candidate.cv_parsed_data = parsed_data
+    candidate.processing_status = "pending"
+    candidate.processing_error = None
     db.commit()
     db.refresh(candidate)
+
+    process_cv.delay(candidate.id, str(file_path))
 
     return {
         "candidate_id": candidate.id,
         "cv_file_path": candidate.cv_file_path,
-        "cv_raw_text_preview": raw_text[:200],
-        "cv_parsed_data": candidate.cv_parsed_data,
+        "processing_status": candidate.processing_status,
     }
 
 @app.get("/jobs/{job_id}/matches")
