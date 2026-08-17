@@ -59,7 +59,20 @@ jobs:
         run: alembic upgrade head
 
       - name: Start Celery worker in background
-        run: celery -A celery_app worker --loglevel=info --detach --pidfile=celery.pid
+        run: |
+          celery -A celery_app worker --loglevel=info --pidfile=celery.pid --logfile=celery.log --detach
+          sleep 10
+          cat celery.log
+
+      - name: Verify Celery worker is ready
+        run: |
+          if grep -q "ready" celery.log; then
+            echo "Worker started successfully"
+          else
+            echo "Worker failed to start — dumping full log:"
+            cat celery.log
+            exit 1
+          fier --loglevel=info --detach --pidfile=celery.pid
 
       - name: Run tests
         run: pytest tests/ -v
