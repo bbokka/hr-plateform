@@ -62,21 +62,21 @@ jobs:
         run: |
           nohup celery -A celery_app worker --loglevel=info > celery.log 2>&1 &
           echo $! > celery.pid
-          sleep 10
+
+          echo "Waiting for Celery worker to be ready..."
+          for i in $(seq 1 15); do
+            if grep -q "ready" celery.log; then
+              echo "Worker is ready"
+              break
+            fi
+            sleep 2
+          done
+
           echo "----- celery.log -----"
           cat celery.log
-          if ! grep -q "ready" celery.log; then
-            echo "Worker failed to start"
-            exit 1
-          fi
 
-      - name: Verify Celery worker is ready
-        run: |
-          if grep -q "ready" celery.log; then
-            echo "Worker started successfully"
-          else
-            echo "Worker failed to start — dumping full log:"
-            cat celery.log
+          if ! grep -q "ready" celery.log; then
+            echo "Worker failed to start within timeout"
             exit 1
           fi
 
