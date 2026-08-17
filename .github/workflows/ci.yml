@@ -72,7 +72,7 @@ jobs:
             echo "Worker failed to start — dumping full log:"
             cat celery.log
             exit 1
-          fier --loglevel=info --detach --pidfile=celery.pid
+          fi
 
       - name: Run tests
         run: pytest tests/ -v
