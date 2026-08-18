@@ -1,8 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Request, status
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -18,8 +17,13 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
+# In production (HTTPS), this must be True so the cookie is only ever sent
+# over an encrypted connection. Locally over plain http, it must be False
+# or the browser will silently refuse to store the cookie at all.
+COOKIE_SECURE = os.getenv("ENVIRONMENT", "development") == "production"
+COOKIE_NAME = "access_token"
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 def hash_password(password: str) -> str:
@@ -46,15 +50,19 @@ def decode_access_token(token: str) -> dict | None:
         return None
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    """FastAPI dependency: validates the bearer token and returns the
-    authenticated User, or raises 401. Add `Depends(get_current_user)` to
-    any route that should require login."""
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    """FastAPI dependency: reads the JWT from the httpOnly cookie, validates
+    it, and returns the authenticated User, or raises 401. Add
+    `Depends(get_current_user)` to any route that should require login.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
     )
+
+    token = request.cookies.get(COOKIE_NAME)
+    if token is None:
+        raise credentials_exception
 
     payload = decode_access_token(token)
     if payload is None:

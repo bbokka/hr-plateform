@@ -28,13 +28,10 @@ def db_session():
 @pytest.fixture(scope="function")
 def client(db_session):
     """FastAPI TestClient wired to the test DB instead of the real one,
-    and pre-authenticated: registers a throwaway test user, logs in, and
-    attaches the bearer token to every request this client makes.
-
-    Now that all routes except /health, /auth/register, /auth/login require
-    auth, every existing test that talks to the API needs a valid token --
-    doing it once here means none of the individual tests have to know or
-    care about auth at all.
+    and pre-authenticated: registers a throwaway test user and logs in.
+    TestClient automatically persists cookies across requests within the
+    same instance, so no manual header handling is needed -- the login
+    response's Set-Cookie is stored and sent on every subsequent request.
     """
     def override_get_db():
         try:
@@ -49,12 +46,10 @@ def client(db_session):
         "email": "test.user@example.com",
         "password": "testpassword123",
     })
-    login_response = test_client.post("/auth/login", data={
+    test_client.post("/auth/login", data={
         "username": "test.user@example.com",
         "password": "testpassword123",
     })
-    token = login_response.json()["access_token"]
-    test_client.headers.update({"Authorization": f"Bearer {token}"})
 
     yield test_client
     app.dependency_overrides.clear()

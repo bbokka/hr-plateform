@@ -10,7 +10,9 @@ import uuid
 from pathlib import Path
 from services.embedding_service import embed_text
 from tasks import process_cv
-from auth import hash_password, verify_password, create_access_token, get_current_user
+from fastapi import Response
+from auth import hash_password, verify_password, create_access_token, get_current_user, COOKIE_NAME, COOKIE_SECURE
+
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -81,13 +83,36 @@ def register(user: UserRegister, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
     token = create_access_token(data={"sub": user.email})
-    return {"access_token": token, "token_type": "bearer"}
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=60 * 60 * 24,
+        path="/",
+    )
+    return {"email": user.email}
+
+
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return {"message": "Logged out"}
+
+
+@app.get("/auth/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    """Lets the frontend check 'am I logged in' on page load without
+    needing to store anything client-side -- the browser sends the cookie
+    automatically, and this either succeeds or 401s."""
+    return {"id": current_user.id, "email": current_user.email}
 
 
 # ---------------------------------------------------------------------------
