@@ -1,14 +1,16 @@
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
-from models import Job, Candidate, Application, ApplicationStatusHistory
+from models import Job, Candidate, Application, ApplicationStatusHistory, User
 import shutil
 import uuid
 from pathlib import Path
 from services.embedding_service import embed_text
 from tasks import process_cv
+from auth import hash_password, verify_password, create_access_token, get_current_user
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -46,8 +48,13 @@ class ApplicationStatusUpdate(BaseModel):
     status: str
 
 
+class UserRegister(BaseModel):
+    email: str
+    password: str
+
+
 # ---------------------------------------------------------------------------
-# Health
+# Health (public)
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
@@ -56,11 +63,39 @@ def health():
 
 
 # ---------------------------------------------------------------------------
-# Jobs
+# Authentication (public)
+# ---------------------------------------------------------------------------
+
+@app.post("/auth/register")
+def register(user: UserRegister, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == user.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_user = User(email=user.email, hashed_password=hash_password(user.password))
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {"id": new_user.id, "email": new_user.email}
+
+
+@app.post("/auth/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+    token = create_access_token(data={"sub": user.email})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# ---------------------------------------------------------------------------
+# Jobs (protected)
 # ---------------------------------------------------------------------------
 
 @app.post("/jobs")
-def create_job(job: JobCreate, db: Session = Depends(get_db)):
+def create_job(job: JobCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     new_job = Job(title=job.title, description=job.description)
     new_job.embedding = embed_text(job.description)
     db.add(new_job)
@@ -70,12 +105,12 @@ def create_job(job: JobCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs")
-def list_jobs(db: Session = Depends(get_db)):
+def list_jobs(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(Job).all()
 
 
 @app.get("/jobs/{job_id}")
-def get_job(job_id: int, db: Session = Depends(get_db)):
+def get_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -83,7 +118,12 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs/{job_id}/matches")
-def get_job_matches(job_id: int, limit: int = 5, db: Session = Depends(get_db)):
+def get_job_matches(
+    job_id: int,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Ranked candidates by semantic similarity, merged with each
     candidate's current application status (if any) for this job -- so the
     frontend can render a single view: 'Add to Pipeline' for candidates with
@@ -130,11 +170,15 @@ def get_job_matches(job_id: int, limit: int = 5, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Candidates
+# Candidates (protected)
 # ---------------------------------------------------------------------------
 
 @app.post("/candidates")
-def create_candidate(candidate: CandidateCreate, db: Session = Depends(get_db)):
+def create_candidate(
+    candidate: CandidateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     new_candidate = Candidate(full_name=candidate.full_name, email=candidate.email)
     db.add(new_candidate)
     db.commit()
@@ -143,12 +187,16 @@ def create_candidate(candidate: CandidateCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/candidates")
-def list_candidates(db: Session = Depends(get_db)):
+def list_candidates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(Candidate).all()
 
 
 @app.get("/candidates/{candidate_id}")
-def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
+def get_candidate(
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -156,7 +204,12 @@ def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/candidates/{candidate_id}/cv")
-def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_cv(
+    candidate_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Save the uploaded file and queue background processing (text
     extraction, NLP parsing, embedding generation -- see tasks.process_cv).
     Returns immediately; the candidate's processing_status can be polled
@@ -192,11 +245,15 @@ def upload_cv(candidate_id: int, file: UploadFile = File(...), db: Session = Dep
 
 
 # ---------------------------------------------------------------------------
-# Applications (tracking pipeline)
+# Applications / tracking pipeline (protected)
 # ---------------------------------------------------------------------------
 
 @app.post("/applications")
-def create_application(application: ApplicationCreate, db: Session = Depends(get_db)):
+def create_application(
+    application: ApplicationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     candidate = db.query(Candidate).filter(Candidate.id == application.candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -232,7 +289,11 @@ def create_application(application: ApplicationCreate, db: Session = Depends(get
 
 
 @app.get("/applications/{application_id}")
-def get_application(application_id: int, db: Session = Depends(get_db)):
+def get_application(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
@@ -241,7 +302,10 @@ def get_application(application_id: int, db: Session = Depends(get_db)):
 
 @app.patch("/applications/{application_id}/status")
 def update_application_status(
-    application_id: int, update: ApplicationStatusUpdate, db: Session = Depends(get_db)
+    application_id: int,
+    update: ApplicationStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
@@ -258,7 +322,11 @@ def update_application_status(
 
 
 @app.get("/applications/{application_id}/history")
-def get_application_history(application_id: int, db: Session = Depends(get_db)):
+def get_application_history(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
@@ -272,7 +340,11 @@ def get_application_history(application_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs/{job_id}/applications")
-def list_job_applications(job_id: int, db: Session = Depends(get_db)):
+def list_job_applications(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """All tracked applications for a job -- the dashboard/pipeline view
     data source, independent of similarity ranking."""
     job = db.query(Job).filter(Job.id == job_id).first()
