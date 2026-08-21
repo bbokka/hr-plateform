@@ -18,12 +18,29 @@ def embed_text(text: str) -> list[float]:
 
 
 def build_candidate_embedding_text(cv_raw_text: str, cv_parsed_data: dict) -> str:
-    """Combine structured skills with raw CV text for a stronger embedding.
-    Prepending skills gives the model a concentrated signal to anchor on,
-    while the raw text still carries context, seniority, and domain nuance.
+    """Combine structured fields with raw CV text for a stronger embedding.
+
+    Expertise, technical skills, and certifications are each prepended as
+    their own labeled line (in that order -- broad domain signal first,
+    concrete tools second, credentials third) to give the model concentrated,
+    distinctly-tagged anchors to match on, while the raw text still carries
+    context, seniority, and domain nuance. Any field that's empty/missing is
+    simply omitted rather than emitted as an empty line.
     """
+    cv_parsed_data = cv_parsed_data or {}
 
+    expertise = cv_parsed_data.get("expertise", [])
+    skills = cv_parsed_data.get("skills", [])
+    certifications = cv_parsed_data.get("certifications", [])
 
-    skills = cv_parsed_data.get("skills", []) if cv_parsed_data else []
-    skills_line = f"Skills: {', '.join(skills)}\n\n" if skills else ""
-    return f"{skills_line}{cv_raw_text or ''}"
+    prefix_lines = []
+    if expertise:
+        prefix_lines.append(f"Expertise: {', '.join(expertise)}")
+    if skills:
+        prefix_lines.append(f"Skills: {', '.join(skills)}")
+    if certifications:
+        prefix_lines.append(f"Certifications: {', '.join(certifications)}")
+
+    prefix = "\n".join(prefix_lines)
+    prefix = f"{prefix}\n\n" if prefix else ""
+    return f"{prefix}{cv_raw_text or ''}"

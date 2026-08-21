@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../assets/Logo_Talentini.svg';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavItem {
   to: string;
@@ -34,6 +35,15 @@ function UsersIcon() {
   );
 }
 
+function PowerIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+        d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+    </svg>
+  );
+}
+
 const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: <DashboardIcon /> },
   { to: '/jobs', label: 'Jobs', icon: <BriefcaseIcon /> },
@@ -41,6 +51,8 @@ const navItems: NavItem[] = [
 ];
 
 export default function Sidebar() {
+  const { user, logout } = useAuth();
+
   return (
     <aside className="fixed left-0 top-0 h-full w-60 bg-primary-dark flex flex-col z-40">
       {/* Logo area */}
@@ -76,10 +88,24 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="px-5 py-4 border-t border-white/10">
-        <p className="text-xs text-white/30 font-medium">TalentiniHR · v1.0</p>
+      {/* User / Logout footer */}
+      <div className="px-4 py-4 border-t border-white/10">
+        {user && (
+          <p className="text-xs text-white/40 font-medium truncate mb-2 px-1" title={user.email}>
+            {user.email}
+          </p>
+        )}
+        <button
+          id="sidebar-logout-btn"
+          onClick={() => void logout()}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-white/60
+            hover:text-white hover:bg-white/8 transition-all duration-150"
+        >
+          <PowerIcon />
+          Sign out
+        </button>
       </div>
     </aside>
   );
 }
+

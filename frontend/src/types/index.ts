@@ -17,6 +17,10 @@ export interface CVParsedData {
   education: string[];
   companies: string[];
   locations: string[];
+  /** High-level professional domains, e.g. "Cloud Architecture" */
+  expertise?: string[];
+  /** Full certification lines, e.g. "2023 AWS Certified…" */
+  certifications?: string[];
 }
 
 export interface Candidate {

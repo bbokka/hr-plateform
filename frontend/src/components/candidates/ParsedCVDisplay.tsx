@@ -27,7 +27,7 @@ export default function ParsedCVDisplay({ data }: ParsedCVDisplayProps) {
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-card divide-y divide-slate-50">
       {/* Header stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-slate-100">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-100">
         <div className="bg-white px-5 py-4">
           <p className="text-xs text-slate-400 font-medium mb-1">Years of Experience</p>
           {data.years_of_experience != null ? (
@@ -37,10 +37,14 @@ export default function ParsedCVDisplay({ data }: ParsedCVDisplayProps) {
           )}
         </div>
         <div className="bg-white px-5 py-4">
+          <p className="text-xs text-slate-400 font-medium mb-1">Expertise Areas</p>
+          <p className="text-2xl font-bold text-primary-dark">{data.expertise?.length ?? 0}</p>
+        </div>
+        <div className="bg-white px-5 py-4">
           <p className="text-xs text-slate-400 font-medium mb-1">Skills Detected</p>
           <p className="text-2xl font-bold text-primary-dark">{data.skills.length}</p>
         </div>
-        <div className="bg-white px-5 py-4 col-span-2 sm:col-span-1">
+        <div className="bg-white px-5 py-4">
           <p className="text-xs text-slate-400 font-medium mb-1">Education Entries</p>
           <p className="text-2xl font-bold text-primary-dark">{data.education.length}</p>
         </div>
@@ -48,6 +52,17 @@ export default function ParsedCVDisplay({ data }: ParsedCVDisplayProps) {
 
       {/* Sections */}
       <div className="p-6">
+        {/* Professional Expertise */}
+        {(data.expertise?.length ?? 0) > 0 && (
+          <Section title="Professional Expertise">
+            <div className="flex flex-wrap gap-2">
+              {data.expertise!.map((domain, i) => (
+                <Badge key={i} variant="skill">{domain}</Badge>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* Skills */}
         <Section title="Skills">
           {data.skills.length > 0 ? (
@@ -76,6 +91,20 @@ export default function ParsedCVDisplay({ data }: ParsedCVDisplayProps) {
             <EmptySection label="No education detected" />
           )}
         </Section>
+
+        {/* Certifications */}
+        {(data.certifications?.length ?? 0) > 0 && (
+          <Section title="Certifications">
+            <ul className="space-y-2">
+              {data.certifications!.map((cert, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary-start shrink-0" aria-hidden="true" />
+                  <span className="text-sm text-primary-dark">{cert}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
 
         {/* Companies */}
         <Section title="Companies">

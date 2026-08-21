@@ -53,11 +53,35 @@ SCHOOL_KEYWORDS = [
 # better than just filtering them out -- "AWS EC2 experience" is genuine
 # matching signal that would otherwise be lost entirely.
 CUSTOM_TECH_SKILLS = [
-    "AWS EC2", "AWS VPC", "AWS EKS", "AWS S3", "AWS IAM", "AWS Lambda",
-    "AWS Route53", "AWS VPC Lattice", "AWS Direct Connect", "CloudFront",
-    "CloudWatch", "ElastiCache", "IPsec", "Filebeat", "APM Server",
-    "Graviton", "GitOps", "Kustomize", "ArgoCD", "Okta", "OpenLDAP",
+    # Cloud / AWS
+    "AWS", "Amazon Web Services", "AWS EC2", "AWS VPC", "AWS EKS",
+    "AWS S3", "AWS IAM", "AWS Lambda", "AWS Route53", "AWS VPC Lattice",
+    "AWS Direct Connect", "AWS ECR", "AWS ECS", "AWS RDS",
+    "CloudFront", "CloudWatch", "ElastiCache", "Graviton",
     "Reserved Instance", "Savings Plan",
+
+    # Containers / orchestration / IaC
+    "Kubernetes", "Terraform", "Kustomize", "ArgoCD", "GitOps",
+    "Docker", "Rancher", "Ansible", "Packer", "Atlantis",
+    "DC/OS", "OpenVPN",
+
+    # Service mesh / networking / security
+    "Istio", "Cilium", "Kuma", "Consul", "Vault", "IPsec",
+    "Okta", "OpenLDAP", "LDAP", "Kong",
+
+    # Observability / data infrastructure
+    "Kafka", "Elastic Stack", "Filebeat", "Heartbeat", "APM Server",
+    "Logstash", "Elasticsearch", "Kibana", "Telegraf", "InfluxDB",
+    "Grafana", "CollectD",
+
+    # Application / platform technologies explicitly present in the CV
+    "CircleCI", "Node.js", "Koa", "REST API", "API", "microservices",
+    "serverless", "Android",
+
+    # Developer tooling / platforms explicitly present in the CV
+    "GitHub", "Slack", "Google Workspace", "Linux", "macOS", "zsh",
+    "Tmux", "NeoVim", "chezmoi", "Claude Code", "Machine Learning",
+    "ML", "AI",
 ]
 
 # The Jobzilla taxonomy includes very generic single-word "skills" (e.g.
@@ -77,8 +101,203 @@ GENERIC_SKILL_BLOCKLIST = {
     "solutions", "systems", "operations", "strategy", "analysis",
     "research", "planning", "reporting", "documentation", "training",
     "leadership", "communication", "presentation", "writing", "editing",
-    "languages", "testing",
+    "languages", "testing", "queue", "play", "console", "google",
+    "computer science", "university",
 }
+
+# Canonical names prevent duplicate skills such as "Terraform"/"terraform",
+# "Docker"/"docker", "Security"/"security", and "Amazon Web Services"/"AWS".
+SKILL_CANONICAL_MAP = {
+    "aws": "AWS",
+    "amazon web services": "AWS",
+    "aws route53": "AWS Route53",
+    "aws ec2": "AWS EC2",
+    "aws vpc": "AWS VPC",
+    "aws eks": "AWS EKS",
+    "aws s3": "AWS S3",
+    "aws iam": "AWS IAM",
+    "aws lambda": "AWS Lambda",
+    "aws vpc lattice": "AWS VPC Lattice",
+    "aws direct connect": "AWS Direct Connect",
+    "aws ecr": "AWS ECR",
+    "aws ecs": "AWS ECS",
+    "aws rds": "AWS RDS",
+    "terraform": "Terraform",
+    "docker": "Docker",
+    "kubernetes": "Kubernetes",
+    "security": "Security",
+    "gitops": "GitOps",
+    "kustomize": "Kustomize",
+    "argocd": "ArgoCD",
+    "neovim": "NeoVim",
+    "node.js": "Node.js",
+    "ml": "ML",
+    "ai": "AI",
+    "machine learning": "Machine Learning",
+    "google workspace": "Google Workspace",
+}
+
+# These are not useful standalone skills in a CV. Most are ordinary nouns
+# extracted by a broad taxonomy from phrases such as "Google Play" or
+# "Dead Letter Queue".
+SKILL_FALSE_POSITIVE_EXACT = {
+    "play",
+    "queue",
+    "console",
+    "google",
+    "computer science",
+    "university",
+}
+
+# Maps a canonicalized technical skill (i.e. the exact strings extract_skills
+# can return, post SKILL_CANONICAL_MAP) to the higher-level professional
+# expertise domain(s) it signals. This is deliberately a many-to-many mapping:
+# a single skill like "Terraform" is genuine evidence of both "Infrastructure
+# as Code" and "DevOps", and a single expertise domain is usually only
+# credible once several of its trigger skills show up together on a CV.
+#
+# Expertise is intentionally *derived* from the technical skills list rather
+# than pattern-matched against free-text prose (e.g. the CV's Summary
+# paragraph): summaries are written in wildly inconsistent phrasing across
+# CVs ("DevOps & SRE practices" vs "site reliability" vs "platform
+# engineering"), whereas the technical skill list is already a normalized,
+# deduplicated signal we trust. Deriving from it keeps expertise deterministic
+# and avoids adding a second, fuzzier NLP surface on top of an already large
+# rules stack.
+SKILL_TO_EXPERTISE = {
+    # Cloud Architecture
+    "AWS": ["Cloud Architecture"],
+    "AWS EC2": ["Cloud Architecture"],
+    "AWS VPC": ["Cloud Architecture"],
+    "AWS EKS": ["Cloud Architecture", "Container Orchestration"],
+    "AWS S3": ["Cloud Architecture"],
+    "AWS IAM": ["Cloud Architecture", "Security Engineering"],
+    "AWS Lambda": ["Cloud Architecture", "Software Architecture"],
+    "AWS Route53": ["Cloud Architecture"],
+    "AWS VPC Lattice": ["Cloud Architecture"],
+    "AWS Direct Connect": ["Cloud Architecture"],
+    "AWS ECR": ["Cloud Architecture"],
+    "AWS ECS": ["Cloud Architecture", "Container Orchestration"],
+    "AWS RDS": ["Cloud Architecture"],
+    "CloudFront": ["Cloud Architecture"],
+    "CloudWatch": ["Cloud Architecture", "Observability"],
+    "ElastiCache": ["Cloud Architecture"],
+    "Graviton": ["Cloud Architecture"],
+    "Reserved Instance": ["Cloud Architecture"],
+    "Savings Plan": ["Cloud Architecture"],
+
+    # Infrastructure as Code / DevOps
+    "Terraform": ["Infrastructure as Code", "DevOps"],
+    "Ansible": ["Infrastructure as Code", "DevOps"],
+    "Packer": ["Infrastructure as Code", "DevOps"],
+    "Atlantis": ["Infrastructure as Code", "CI/CD"],
+    "Kustomize": ["Infrastructure as Code", "DevOps"],
+    "GitOps": ["Infrastructure as Code", "CI/CD"],
+    "ArgoCD": ["CI/CD", "DevOps"],
+    "CircleCI": ["CI/CD"],
+
+    # Container orchestration / DevOps
+    "Kubernetes": ["Container Orchestration", "DevOps", "Infrastructure Engineering"],
+    "Docker": ["Container Orchestration", "DevOps"],
+    "Rancher": ["Container Orchestration", "DevOps"],
+    "DC/OS": ["Container Orchestration", "Infrastructure Engineering"],
+
+    # Service Mesh
+    "Istio": ["Service Mesh"],
+    "Cilium": ["Service Mesh"],
+    "Kuma": ["Service Mesh"],
+    "Consul": ["Service Mesh", "Infrastructure Engineering"],
+
+    # Security Engineering
+    "Vault": ["Security Engineering"],
+    "Okta": ["Security Engineering"],
+    "OpenLDAP": ["Security Engineering"],
+    "LDAP": ["Security Engineering"],
+    "IPsec": ["Security Engineering"],
+    "OpenVPN": ["Security Engineering"],
+    "Kong": ["Security Engineering", "Microservices"],
+
+    # Observability / Site Reliability Engineering
+    "Kafka": ["Observability", "Microservices"],
+    "Elastic Stack": ["Observability"],
+    "Filebeat": ["Observability"],
+    "Heartbeat": ["Observability"],
+    "APM Server": ["Observability", "Site Reliability Engineering"],
+    "Logstash": ["Observability"],
+    "Elasticsearch": ["Observability"],
+    "Kibana": ["Observability"],
+    "Telegraf": ["Observability"],
+    "InfluxDB": ["Observability"],
+    "Grafana": ["Observability", "Site Reliability Engineering"],
+    "CollectD": ["Observability"],
+
+    # Microservices / Software Architecture
+    "Node.js": ["Software Architecture", "Microservices"],
+    "Koa": ["Software Architecture", "Microservices"],
+    "REST API": ["Software Architecture"],
+    "API": ["Software Architecture"],
+    "microservices": ["Microservices", "Software Architecture"],
+    "serverless": ["Software Architecture", "Cloud Architecture"],
+
+    # Machine Learning
+    "Machine Learning": ["Machine Learning"],
+    "ML": ["Machine Learning"],
+}
+
+
+def extract_expertise(skills: list[str]) -> list[str]:
+    """Derive professional expertise domains (e.g. 'DevOps', 'Cloud
+    Architecture') from an already-extracted, canonicalized skills list.
+
+    Order is deterministic: expertise domains appear in the order their
+    first triggering skill first appears in `skills`, and each domain is
+    reported once no matter how many of its trigger skills are present.
+    """
+    seen = set()
+    results = []
+    for skill in skills:
+        for domain in SKILL_TO_EXPERTISE.get(skill, []):
+            if domain not in seen:
+                seen.add(domain)
+                results.append(domain)
+    return results
+
+
+def _canonical_skill(value: str) -> str:
+    key = re.sub(r"\s+", " ", value.strip()).lower()
+    return SKILL_CANONICAL_MAP.get(key, value.strip())
+
+def _skill_is_context_noise(ent, text: str) -> bool:
+    """Reject taxonomy matches that are technically words but not skills."""
+    value = re.sub(r"\s+", " ", ent.text.strip())
+    lower = value.lower()
+
+    if lower in SKILL_FALSE_POSITIVE_EXACT:
+        return True
+
+    # "Play" in this CV comes from "Google Play"; never expose it as a skill.
+    if lower == "play":
+        window = text[max(0, ent.start_char - 30):ent.end_char + 30].lower()
+        if "google play" in window:
+            return True
+
+    # "Google" is useful only as part of "Google Workspace".
+    if lower == "google":
+        window = text[max(0, ent.start_char - 10):ent.end_char + 30].lower()
+        if "google workspace" in window:
+            return True
+
+    # "Queue" here is part of "Dead Letter Queue", not a standalone technology.
+    if lower == "queue":
+        window = text[max(0, ent.start_char - 35):ent.end_char + 15].lower()
+        if "dead letter queue" in window:
+            return True
+
+    # Never report a degree/domain phrase as a technical skill.
+    if lower == "computer science":
+        return True
+
+    return False
 
 
 def _pattern_text(pattern) -> str:
@@ -189,24 +408,163 @@ def extract_years_of_experience(text: str) -> int | None:
     return max(int(y) for y in matches)
 
 
-def extract_education(doc) -> list[str]:
-    seen = []
-    for ent in doc.ents:
-        if ent.label_ == "EDUCATION":
-            value = ent.text.strip()
-            if value and value not in seen:
-                seen.append(value)
-    return seen
+def _line_boundaries(text: str) -> list[tuple[int, int, str]]:
+    """Return (start_char, end_char, stripped_line_text) for every line in
+    text, using the same character offsets spaCy entities use (ent.start_char).
+    Used to expand a short EntityRuler match (e.g. just the word "University")
+    out to the full line it appears on (e.g. the whole institution name),
+    since a bare keyword match on its own throws away all the useful context
+    around it."""
+    lines = []
+    offset = 0
+    for raw_line in text.split("\n"):
+        start = offset
+        end = offset + len(raw_line)
+        lines.append((start, end, raw_line.strip()))
+        offset = end + 1  # +1 accounts for the newline character itself
+    return lines
 
 
-def extract_skills(doc) -> list[str]:
-    seen = []
+def extract_education(doc, text: str) -> list[str]:
+    """Return full education lines (institution + degree), not just the bare
+    keyword the EntityRuler happened to match.
+
+    The edu_ruler patterns are intentionally short/exact (e.g. the literal
+    word "University", or the abbreviation "B.S.") so they reliably match
+    across very different phrasings. But returning that bare match directly
+    loses all context -- "University" on its own tells you nothing. Résumés
+    reliably put one institution or degree per line, so expanding each match
+    to its containing line recovers the actual useful information (e.g.
+    "POSTECH (Pohang University of Science and Technology) Pohang, S.Korea").
+    """
+    lines = _line_boundaries(text)
+    seen_lower = set()
+    results = []
+
     for ent in doc.ents:
-        if ent.label_ == "SKILL":
-            value = ent.text.strip()
-            if value and value not in seen:
-                seen.append(value)
-    return seen
+        if ent.label_ != "EDUCATION":
+            continue
+        for start, end, line_text in lines:
+            if start <= ent.start_char < end:
+                if line_text and line_text.lower() not in seen_lower:
+                    seen_lower.add(line_text.lower())
+                    results.append(line_text)
+                break
+
+    if results:
+        return results
+
+    # Fallback: some CVs contain an education section but use institution names
+    # that do not contain our school keywords. Return non-empty lines from that
+    # section instead of losing education completely.
+    edu_matches = [
+        m for m in _SECTION_HEADER_RE.finditer(text)
+        if m.group(1).strip().lower() == "education"
+    ]
+    if edu_matches:
+        start = edu_matches[0].end()
+        end = len(text)
+        for m in _SECTION_HEADER_RE.finditer(text, start):
+            if m.start() > start:
+                end = m.start()
+                break
+
+        for _, _, line_text in _line_boundaries(text[start:end]):
+            if line_text and line_text.lower() not in seen_lower:
+                seen_lower.add(line_text.lower())
+                results.append(line_text)
+
+    return results
+
+
+_CERTIFICATION_HEADER_WORDS = {"certificates", "certifications", "certificate", "certification"}
+
+
+def extract_certifications(text: str) -> list[str]:
+    """Return raw lines from the Certificates/Certifications section, if
+    present. Unlike extract_education, this doesn't need entity-based line
+    expansion -- certification lines (e.g. "2023 AWS Certified Advanced
+    Networking - Specialty, Amazon Web Services (AWS)") are already
+    self-contained, so we just take the section's non-empty lines as-is.
+    """
+    matches = [
+        m for m in _SECTION_HEADER_RE.finditer(text)
+        if m.group(1).strip().lower() in _CERTIFICATION_HEADER_WORDS
+    ]
+    if not matches:
+        return []
+
+    start = matches[0].end()
+    end = len(text)
+    for m in _SECTION_HEADER_RE.finditer(text, start):
+        if m.start() > start:
+            end = m.start()
+            break
+
+    raw_lines = [
+        line_text for _, _, line_text in _line_boundaries(text[start:end])
+        if line_text
+    ]
+
+    # PDF layout extraction commonly puts the certification year on its own
+    # line, separate from the certification name/issuer line right after it
+    # (e.g. "2023" then "AWS Certified Advanced Networking - Specialty,
+    # Amazon Web Services (AWS)" as two distinct lines). Left unmerged, a
+    # bare year would be reported as its own fake "certification". Detect
+    # a standalone 4-digit year and fold it into the following line.
+    year_only_re = re.compile(r"^(19|20)\d{2}$")
+    seen_lower = set()
+    results = []
+    i = 0
+    while i < len(raw_lines):
+        line = raw_lines[i]
+        if year_only_re.match(line) and i + 1 < len(raw_lines):
+            line = f"{line} {raw_lines[i + 1]}"
+            i += 2
+        else:
+            i += 1
+        if line.lower() not in seen_lower:
+            seen_lower.add(line.lower())
+            results.append(line)
+    return results
+
+
+def extract_skills(doc, text: str) -> list[str]:
+    """Return normalized, deduplicated skills with obvious taxonomy noise removed.
+
+    The Jobzilla taxonomy is intentionally broad. We therefore keep it as the
+    discovery layer, but apply a quality gate before storing a skill:
+      - reject known standalone false positives;
+      - reject generic single-word taxonomy terms;
+      - canonicalize aliases/casing;
+      - deduplicate case-insensitively.
+    """
+    seen_lower = set()
+    results = []
+
+    for ent in doc.ents:
+        if ent.label_ != "SKILL":
+            continue
+
+        if _skill_is_context_noise(ent, text):
+            continue
+
+        value = _canonical_skill(ent.text)
+
+        if not value:
+            continue
+
+        if len(value.split()) == 1 and value.lower() in GENERIC_SKILL_BLOCKLIST:
+            continue
+
+        key = value.lower()
+        if key in seen_lower:
+            continue
+
+        seen_lower.add(key)
+        results.append(value)
+
+    return results
 
 
 TRAILING_NOISE_WORDS = {"and", "of", "the", "with", "&", "in", "for", "to", "at"}
@@ -231,6 +589,46 @@ LEADING_VERB_BLOCKLIST = {
 # ("deployed on AWS"), not a literal employer, so filtering it out of
 # companies is the more accurate default.
 SHORT_ENTITY_ALLOWLIST = {"ibm", "gcp", "hp", "ge", "3m", "bp", "ea"}
+
+# Generic single-word ORG fragments that carry no company-identifying
+# signal on their own -- almost always a leftover piece of a job title
+# ("Software Architect" -> "Software") or a stray section word, not an
+# actual employer name.
+GENERIC_ORG_BLOCKLIST = {
+    "software", "service", "services", "team", "solutions", "group",
+    "technology", "technologies",
+}
+
+# Specific products/tools that spaCy's NER reliably mis-tags as ORG because
+# they're capitalized proper nouns, but which are never themselves an
+# employer -- e.g. "...email, SMS, Kakaotalk and Slack notification..."
+# reads exactly like a list of company names to a general-purpose NER
+# model. Same curation pattern already used for CUSTOM_TECH_SKILLS above;
+# this list is expected to grow as new real-world false positives surface.
+KNOWN_NON_COMPANY_PRODUCTS = {"kakaotalk", "slack", "whatsapp", "telegram"}
+
+# If an extracted "company" contains one of these role/description words
+# AND has no business-entity marker (see BUSINESS_ENTITY_MARKERS), it's
+# almost certainly a job title or duty description that NER mis-tagged as
+# an org, not an actual employer -- e.g. "Reliability Engineer &
+# Infrastructure Team Lead" or "Compulsory Military Service".
+JOB_TITLE_WORDS = {
+    "engineer", "architect", "lead", "manager", "director", "administrator",
+    "researcher", "specialist", "consultant", "developer", "military",
+}
+
+BUSINESS_ENTITY_MARKERS = {
+    "inc", "corp", "corporation", "co", "ltd", "llc", "company",
+    "companies", "group", "technologies", "systems", "solutions", "holdings",
+}
+
+
+def _looks_like_job_title_not_company(text: str) -> bool:
+    words = re.sub(r"[.,&]", " ", text.lower()).split()
+    has_business_marker = any(w in BUSINESS_ENTITY_MARKERS for w in words)
+    if has_business_marker:
+        return False
+    return any(w in JOB_TITLE_WORDS for w in words)
 
 
 def _looks_like_noise(text: str) -> bool:
@@ -265,25 +663,252 @@ def _looks_like_noise(text: str) -> bool:
     # the allowlist of real short abbreviations.
     if len(words) == 1 and len(text) <= 3 and text.lower() not in SHORT_ENTITY_ALLOWLIST:
         return True
+    # Generic single-word ORG fragment ("Software" peeled off "Software
+    # Architect") -- see GENERIC_ORG_BLOCKLIST above.
+    if len(words) == 1 and text.lower() in GENERIC_ORG_BLOCKLIST:
+        return True
+    # Known product/tool names that NER reliably mis-tags as companies.
+    if text.lower() in KNOWN_NON_COMPANY_PRODUCTS:
+        return True
 
     return False
 
+# Resume work-history entries are much more reliable than unrestricted ORG NER:
+# in the supplied CV every employer line is immediately followed by a role/date
+# line. This avoids turning "Reliability Engineer & Infrastructure Team Lead",
+# "Compulsory Military Service", "Kakaotalk", etc. into companies.
+_DATE_RANGE_RE = re.compile(
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    r"\.?\s+\d{4}\s*(?:-|–|—|to)\s*"
+    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    r"\.?\s+\d{4}|Present|Current)\b",
+    re.IGNORECASE,
+)
 
-def extract_entities(doc, labels: tuple[str, ...], char_range: tuple[int, int] | None = None) -> list[str]:
+def _nonempty_lines_with_offsets(text: str, char_range: tuple[int, int]) -> list[tuple[int, int, str]]:
+    start, end = char_range
+    result = []
+
+    for raw_start, raw_end, line_text in _line_boundaries(text):
+        if raw_end <= start or raw_start >= end:
+            continue
+        stripped = line_text.strip()
+        if stripped:
+            result.append((raw_start, raw_end, stripped))
+
+    return result
+
+def _strip_location_from_company_line(
+    line: str,
+    line_start: int,
+    doc,
+) -> str:
+    """Remove trailing GPE/location spans while preserving the employer name."""
+    absolute_end = line_start + len(line)
+
+    gpes = [
+        ent for ent in doc.ents
+        if ent.label_ in {"GPE", "LOC"}
+        and line_start <= ent.start_char < absolute_end
+        and ent.end_char <= absolute_end
+    ]
+
+    if gpes:
+        # Only remove a GPE if it occurs near the end of the employer line.
+        last = max(gpes, key=lambda e: e.end_char)
+        if last.end_char >= line_start + int(len(line) * 0.55):
+            line = line[:last.start_char - line_start].rstrip(" ,|-")
+
+    # Fallback for common "City, Country" suffixes when NER does not tag the
+    # location. It is deliberately conservative and only removes the suffix
+    # after a company-like prefix.
+    line = re.sub(
+        r"\s+(?:Seoul|New York|San Francisco|London|Paris|"
+        r"Toronto|Singapore|Tokyo|Pohang),\s*"
+        r"(?:S\.Korea|South Korea|Republic of Korea|U\.S\.A\.|USA|"
+        r"United States|UK|United Kingdom|Canada|Japan)\s*$",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    )
+
+    return line.strip(" ,|-")
+
+def _looks_like_company_candidate(line: str) -> bool:
+    """Reject obvious role/title lines when layout detection produces a candidate."""
+    if not line or len(line) > 140:
+        return False
+
+    if line.startswith(("•", "-", "–", "—")):
+        return False
+
+    if _looks_like_noise(line):
+        return False
+
+    if _looks_like_job_title_not_company(line):
+        # A real company can contain these words, but standalone role-shaped
+        # lines without a business marker are overwhelmingly job titles.
+        return False
+
+    return True
+
+_LOCATION_ONLY_RE = re.compile(
+    r"^\s*(?:Seoul|New York|San Francisco|London|Paris|"
+    r"Toronto|Singapore|Tokyo|Pohang|Mapo-gu, Seoul),\s*"
+    r"(?:S\.Korea|South Korea|Republic of Korea|U\.S\.A\.|USA|"
+    r"United States|UK|United Kingdom|Canada|Japan)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _line_is_location_only(line: str, line_start: int, line_end: int, doc) -> bool:
+    """Detect a résumé line that is nothing but a city/country (e.g. 'Seoul,
+    S.Korea' on its own line, separate from the employer name above it and
+    the role title below it). Needed because many résumé layouts put company,
+    location, role, and date on four separate lines rather than the two the
+    original layout heuristic assumed -- without skipping the location line,
+    the heuristic reads the role title as the employer name."""
+    if not line:
+        return False
+
+    if _LOCATION_ONLY_RE.match(line):
+        return True
+
+    # Fallback: if a GPE/LOC entity covers most of the line's characters,
+    # treat it as a location-only line even for cities not in the known list
+    # above (keeps this from being purely a Seoul-specific special case).
+    ents = [
+        e for e in doc.ents
+        if e.label_ in {"GPE", "LOC"}
+        and line_start <= e.start_char < line_end
+        and e.end_char <= line_end
+    ]
+    if not ents:
+        return False
+    covered = sum(e.end_char - e.start_char for e in ents)
+    return covered >= 0.6 * max(len(line), 1)
+
+
+def extract_companies_from_experience(
+    doc,
+    text: str,
+    experience_span: tuple[int, int] | None,
+) -> list[str]:
+    """Extract employer names from the Work Experience section.
+
+    Primary strategy:
+      company line -> role/date line
+
+    Fallback:
+      ORG NER restricted to the Work Experience section.
+    """
+    seen = set()
+    results = []
+
+    if experience_span:
+        lines = _nonempty_lines_with_offsets(text, experience_span)
+
+        # Look for a role/date line. The preceding non-empty line is the
+        # employer in the common two-line resume layout.
+        for i, (start, end, line) in enumerate(lines):
+            if not _DATE_RANGE_RE.search(line):
+                continue
+
+            if i == 0:
+                continue
+
+            # Walk backward past a role/title line and/or a standalone
+            # location line to find the actual employer line. Layouts vary:
+            # some put company+location on one line and role+date on the
+            # next (2-line); this CV puts company, location, role, and date
+            # each on their own line (4-line). A fixed "one line back"
+            # assumption only handles the former. Bounded to 3 lines back so
+            # a malformed layout can't walk arbitrarily far and grab the
+            # wrong text.
+            j = i - 1
+            skipped_role = False
+            while j >= 0 and (i - j) <= 3:
+                cand_start, cand_end, cand_line = lines[j]
+                if not skipped_role and _looks_like_job_title_not_company(cand_line):
+                    skipped_role = True
+                    j -= 1
+                    continue
+                if _line_is_location_only(cand_line, cand_start, cand_end, doc):
+                    j -= 1
+                    continue
+                break
+
+            if j < 0 or (i - j) > 3:
+                continue
+
+            previous_start, _, previous_line = lines[j]
+
+            # If the date is on the employer line itself, prefer ORG NER
+            # rather than treating the whole role/date line as the company.
+            if _looks_like_job_title_not_company(previous_line):
+                continue
+
+            candidate = _strip_location_from_company_line(
+                previous_line,
+                previous_start,
+                doc,
+            )
+
+            if not _looks_like_company_candidate(candidate):
+                continue
+
+            key = candidate.lower()
+            if key not in seen:
+                seen.add(key)
+                results.append(candidate)
+
+        # If layout extraction found employers, trust it. This prevents the
+        # general NER model from adding certificates, community groups, tools,
+        # job titles, and sentence fragments.
+        if results:
+            return results
+
+    # Fallback for unconventional CV layouts.
+    return extract_entities(
+        doc,
+        ("ORG",),
+        char_range=experience_span,
+        filter_job_titles=True,
+    )
+
+
+def extract_entities(
+    doc,
+    labels: tuple[str, ...],
+    char_range: tuple[int, int] | None = None,
+    filter_job_titles: bool = False,
+) -> list[str]:
     """Extract entities with the given labels, optionally restricted to a
     character-offset range within the original text (see char_range param
     on parse_cv -- used to keep 'companies' scoped to the Work Experience
-    section only, see _find_experience_section below)."""
-    seen = []
+    section only, see _find_experience_section below).
+
+    filter_job_titles: when True (used for the companies list specifically),
+    also drops entities that look like job titles/duty descriptions rather
+    than actual employer names -- see _looks_like_job_title_not_company.
+    """
+    seen_lower = set()
+    results = []
     for ent in doc.ents:
         if ent.label_ not in labels:
             continue
         if char_range and not (char_range[0] <= ent.start_char < char_range[1]):
             continue
         value = ent.text.strip()
-        if value and value not in seen and not _looks_like_noise(value):
-            seen.append(value)
-    return seen
+        if not value or value.lower() in seen_lower:
+            continue
+        if _looks_like_noise(value):
+            continue
+        if filter_job_titles and _looks_like_job_title_not_company(value):
+            continue
+        seen_lower.add(value.lower())
+        results.append(value)
+    return results
 
 
 # Résumés bundle many unrelated organization-shaped mentions together:
@@ -380,15 +1005,20 @@ def parse_cv(raw_text: str) -> dict:
     # Falls back to unrestricted extraction if no section headers are
     # detected at all, so simpler/shorter CVs still get a result.
     experience_span = _find_experience_section(text)
+    skills = extract_skills(doc, text)
 
     return {
         "name": pick_name(doc, text),
         "email": extract_email(text),
         "phone": extract_phone(text),
         "years_of_experience": extract_years_of_experience(text),
-        "skills": extract_skills(doc),
-        "education": extract_education(doc),
-        "companies": extract_entities(doc, ("ORG",), char_range=experience_span),
+        "expertise": extract_expertise(skills),
+        "skills": skills,
+        "education": extract_education(doc, text),
+        "certifications": extract_certifications(text),
+        "companies": extract_companies_from_experience(
+            doc, text, experience_span
+        ),
         "locations": extract_entities(doc, ("GPE",)),
     }
 

@@ -15,21 +15,43 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
 
+/**
+ * Called whenever any API response comes back with a 401 status.
+ * The AuthContext registers a handler here so session expiry is handled
+ * centrally without touching individual call sites.
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
 
-  const isFormData = body instanceof FormData;
+  const isFormData = body instanceof FormData || body instanceof URLSearchParams;
 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
+    credentials: 'include', // always send the httpOnly auth cookie
     headers: {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...headers,
     },
-    body: isFormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+    body: isFormData
+      ? (body as BodyInit)
+      : body !== undefined
+        ? JSON.stringify(body)
+        : undefined,
   });
 
   if (!response.ok) {
+    // Fire the 401 handler (if registered) before throwing, so the
+    // AuthContext can clear state and redirect to /login automatically.
+    if (response.status === 401 && unauthorizedHandler) {
+      unauthorizedHandler();
+    }
+
     let message = `Request failed with status ${response.status}`;
     try {
       const data = await response.json();
