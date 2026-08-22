@@ -425,6 +425,114 @@ def _line_boundaries(text: str) -> list[tuple[int, int, str]]:
     return lines
 
 
+def _blank_line_blocks(text_slice: str) -> list[list[str]]:
+    """Split a section's text into blocks of consecutive non-blank lines,
+    separated by one or more blank lines. This depends on block-aware
+    extraction (see extract_text_from_cv) preserving the PDF's real visual
+    paragraph boundaries as blank lines -- without that, plain-text
+    extraction collapses everything into one giant block with no way to
+    tell where one CV entry ends and the next begins."""
+    blocks = []
+    current = []
+    for raw_line in text_slice.split("\n"):
+        stripped = raw_line.strip()
+        if stripped:
+            current.append(stripped)
+        else:
+            if current:
+                blocks.append(current)
+                current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+_YEAR_ONLY_RE = re.compile(r"^(19|20)\d{2}$")
+
+
+def _split_block_on_standalone_years(lines: list[str]) -> list[list[str]]:
+    """If a block (lines with no blank-line separation between them, e.g.
+    from a DOCX file, which has no visual 'block' concept the way a PDF
+    does) contains multiple standalone year lines, treat each year -- and
+    everything up to but not including the next standalone year -- as its
+    own separate entry. This handles formats/CVs where distinct entries
+    are packed together with no blank-line separator at all, but are still
+    visually delimited by a repeating 'year, then description' pattern."""
+    year_indexes = [i for i, line in enumerate(lines) if _YEAR_ONLY_RE.match(line)]
+    if len(year_indexes) < 2:
+        return [lines]
+
+    sub_blocks = []
+    if year_indexes[0] > 0:
+        # Content before the first standalone year (rare) stays its own
+        # leading block so it isn't silently dropped.
+        sub_blocks.append(lines[:year_indexes[0]])
+    for idx, start in enumerate(year_indexes):
+        end = year_indexes[idx + 1] if idx + 1 < len(year_indexes) else len(lines)
+        sub_blocks.append(lines[start:end])
+    return sub_blocks
+
+
+def _join_block_lines(lines: list[str]) -> str:
+    """Join one entry's own lines into a single coherent string. A leading
+    bare 4-digit year (e.g. a certification's issue year styled as its own
+    line) is joined to the line right after it with a space -- "2023 AWS
+    Certified ..." reads naturally, whereas "2023, AWS Certified..."
+    doesn't. Every other line boundary is joined with a comma, since a
+    résumé entry is usually a citation-style list (title, institution,
+    location). Each line's own trailing comma/whitespace is stripped first
+    so joining doesn't produce a doubled comma (e.g. a source line already
+    ending in "Present," followed by our own comma-join)."""
+    cleaned = [line.rstrip(", ") for line in lines]
+    if len(cleaned) >= 2 and _YEAR_ONLY_RE.match(cleaned[0]):
+        return ", ".join([f"{cleaned[0]} {cleaned[1]}"] + cleaned[2:])
+    return ", ".join(cleaned)
+
+
+def _is_date_or_location_tail(lines: list[str]) -> bool:
+    """A short block (<=2 lines) whose content is essentially just a date
+    range and/or a short location -- e.g. ['09/2022 - Present,',
+    'Manouba'] -- is almost always a continuation of the entry immediately
+    above it, not a new entry of its own. Some CV templates style the
+    date/location line with different formatting than the title/
+    institution line, which makes PDF block-extraction split them into
+    separate visual blocks even though they belong to one logical entry."""
+    if not lines or len(lines) > 2:
+        return False
+    joined = " ".join(lines)
+    if not _DATE_RANGE_RE.search(joined):
+        return False
+    # Reject if the block also contains a long descriptive sentence -- a
+    # genuine new entry that happens to start with its own date shouldn't
+    # be silently swallowed into the previous one.
+    return all(len(line.split()) <= 6 for line in lines)
+
+
+def _group_section_into_entries(text_slice: str) -> list[str]:
+    """Group a résumé section's raw lines into one string per logical
+    entry:
+      1. Split into blank-line-separated blocks (see _blank_line_blocks) --
+         this is the primary signal, reflecting the PDF's real visual
+         paragraph boundaries when block-aware extraction was used.
+      2. Within any block that still contains multiple standalone-year
+         lines (e.g. DOCX text, which has no blank-line/block concept at
+         all), further split on that repeating pattern.
+      3. Join each resulting entry's lines into one string, folding a
+         trailing date/location-only block into the entry above it (see
+         _is_date_or_location_tail) so a differently-styled date line
+         doesn't get reported as its own fake entry.
+    """
+    entries = []
+    for block_lines in _blank_line_blocks(text_slice):
+        for lines in _split_block_on_standalone_years(block_lines):
+            if entries and _is_date_or_location_tail(lines):
+                entries[-1] = f"{entries[-1]}, {_join_block_lines(lines)}"
+            else:
+                entries.append(_join_block_lines(lines))
+
+    return entries
+
+
 def extract_education(doc, text: str) -> list[str]:
     """Return full education lines (institution + degree), not just the bare
     keyword the EntityRuler happened to match.
@@ -454,9 +562,11 @@ def extract_education(doc, text: str) -> list[str]:
     if results:
         return results
 
-    # Fallback: some CVs contain an education section but use institution names
-    # that do not contain our school keywords. Return non-empty lines from that
-    # section instead of losing education completely.
+    # Fallback: some CVs contain an education section but use institution
+    # names that do not contain our school keywords. Group the section's
+    # lines into one coherent entry per logical block (see
+    # _group_section_into_entries) instead of returning every raw line as
+    # its own fragment.
     edu_matches = [
         m for m in _SECTION_HEADER_RE.finditer(text)
         if m.group(1).strip().lower() == "education"
@@ -469,10 +579,10 @@ def extract_education(doc, text: str) -> list[str]:
                 end = m.start()
                 break
 
-        for _, _, line_text in _line_boundaries(text[start:end]):
-            if line_text and line_text.lower() not in seen_lower:
-                seen_lower.add(line_text.lower())
-                results.append(line_text)
+        for entry in _group_section_into_entries(text[start:end]):
+            if entry and entry.lower() not in seen_lower:
+                seen_lower.add(entry.lower())
+                results.append(entry)
 
     return results
 
@@ -481,11 +591,12 @@ _CERTIFICATION_HEADER_WORDS = {"certificates", "certifications", "certificate", 
 
 
 def extract_certifications(text: str) -> list[str]:
-    """Return raw lines from the Certificates/Certifications section, if
-    present. Unlike extract_education, this doesn't need entity-based line
-    expansion -- certification lines (e.g. "2023 AWS Certified Advanced
-    Networking - Specialty, Amazon Web Services (AWS)") are already
-    self-contained, so we just take the section's non-empty lines as-is.
+    """Return one coherent string per certification from the
+    Certificates/Certifications section, if present. Uses the same
+    block-based entry grouping as extract_education's fallback (see
+    _group_section_into_entries) so a certification whose title and
+    issuer/description span multiple PDF-extracted lines comes back as one
+    entry rather than one fragment per line.
     """
     matches = [
         m for m in _SECTION_HEADER_RE.finditer(text)
@@ -501,31 +612,12 @@ def extract_certifications(text: str) -> list[str]:
             end = m.start()
             break
 
-    raw_lines = [
-        line_text for _, _, line_text in _line_boundaries(text[start:end])
-        if line_text
-    ]
-
-    # PDF layout extraction commonly puts the certification year on its own
-    # line, separate from the certification name/issuer line right after it
-    # (e.g. "2023" then "AWS Certified Advanced Networking - Specialty,
-    # Amazon Web Services (AWS)" as two distinct lines). Left unmerged, a
-    # bare year would be reported as its own fake "certification". Detect
-    # a standalone 4-digit year and fold it into the following line.
-    year_only_re = re.compile(r"^(19|20)\d{2}$")
     seen_lower = set()
     results = []
-    i = 0
-    while i < len(raw_lines):
-        line = raw_lines[i]
-        if year_only_re.match(line) and i + 1 < len(raw_lines):
-            line = f"{line} {raw_lines[i + 1]}"
-            i += 2
-        else:
-            i += 1
-        if line.lower() not in seen_lower:
-            seen_lower.add(line.lower())
-            results.append(line)
+    for entry in _group_section_into_entries(text[start:end]):
+        if entry and entry.lower() not in seen_lower:
+            seen_lower.add(entry.lower())
+            results.append(entry)
     return results
 
 
@@ -677,11 +769,18 @@ def _looks_like_noise(text: str) -> bool:
 # in the supplied CV every employer line is immediately followed by a role/date
 # line. This avoids turning "Reliability Engineer & Infrastructure Team Lead",
 # "Compulsory Military Service", "Kakaotalk", etc. into companies.
+#
+# Two date formats are recognized: month-name ("Jun. 2023") and numeric
+# ("06/2023") -- different CV templates use different conventions, and a
+# regex built around only one silently fails to detect any date line at all
+# for CVs using the other (which then breaks every downstream heuristic
+# anchored on finding the date line, e.g. company extraction).
+_MONTH_NAME_DATE = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{4}"
+_NUMERIC_DATE = r"\d{1,2}/\d{4}"
+
 _DATE_RANGE_RE = re.compile(
-    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
-    r"\.?\s+\d{4}\s*(?:-|–|—|to)\s*"
-    r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
-    r"\.?\s+\d{4}|Present|Current)\b",
+    r"\b(?:" + _MONTH_NAME_DATE + r"|" + _NUMERIC_DATE + r")\s*(?:-|–|—|to)\s*"
+    r"(?:" + _MONTH_NAME_DATE + r"|" + _NUMERIC_DATE + r"|Present|Current)\b",
     re.IGNORECASE,
 )
 
@@ -752,22 +851,32 @@ def _looks_like_company_candidate(line: str) -> bool:
 
     return True
 
+_KNOWN_LOCATION_COUNTRIES = (
+    r"S\.Korea|South Korea|Republic of Korea|U\.S\.A\.|USA|"
+    r"United States|UK|United Kingdom|Canada|Japan|Germany|France|"
+    r"Australia|India|China|Ireland|Spain|Italy|Netherlands|Singapore"
+)
+
+# Matches a standalone "City, ST" (US-style 2-letter state) or "City,
+# Country" line. Deliberately general rather than a hardcoded city list --
+# spaCy's GPE/LOC entities can't be trusted as the sole fallback here (e.g.
+# it tags "Austin" as PERSON and "TX" as ORG in short address-only lines,
+# not GPE/LOC at all), so a location-shaped text pattern catches what NER
+# misses.
 _LOCATION_ONLY_RE = re.compile(
-    r"^\s*(?:Seoul|New York|San Francisco|London|Paris|"
-    r"Toronto|Singapore|Tokyo|Pohang|Mapo-gu, Seoul),\s*"
-    r"(?:S\.Korea|South Korea|Republic of Korea|U\.S\.A\.|USA|"
-    r"United States|UK|United Kingdom|Canada|Japan)\s*$",
-    re.IGNORECASE,
+    r"^\s*[A-Za-z][A-Za-z.\s'\-]*,\s*"
+    r"(?:[A-Z]{2}|" + _KNOWN_LOCATION_COUNTRIES + r")\s*$"
 )
 
 
 def _line_is_location_only(line: str, line_start: int, line_end: int, doc) -> bool:
     """Detect a résumé line that is nothing but a city/country (e.g. 'Seoul,
-    S.Korea' on its own line, separate from the employer name above it and
-    the role title below it). Needed because many résumé layouts put company,
-    location, role, and date on four separate lines rather than the two the
-    original layout heuristic assumed -- without skipping the location line,
-    the heuristic reads the role title as the employer name."""
+    S.Korea' or 'Austin, TX' on its own line, separate from the employer
+    name above it and the role title below it). Needed because many résumé
+    layouts put company, location, role, and date on four separate lines
+    rather than the two the original layout heuristic assumed -- without
+    skipping the location line, the heuristic reads the role title (or the
+    location itself) as the employer name."""
     if not line:
         return False
 
@@ -775,8 +884,12 @@ def _line_is_location_only(line: str, line_start: int, line_end: int, doc) -> bo
         return True
 
     # Fallback: if a GPE/LOC entity covers most of the line's characters,
-    # treat it as a location-only line even for cities not in the known list
-    # above (keeps this from being purely a Seoul-specific special case).
+    # treat it as a location-only line even where the text pattern above
+    # doesn't match (e.g. a country name spelled out that isn't in the
+    # known list). This is a genuine best-effort fallback, not a
+    # guarantee -- spaCy's generic NER can mislabel short address-only
+    # lines (city names read as PERSON, state codes read as ORG), so the
+    # text pattern above is the more reliable signal when it applies.
     ents = [
         e for e in doc.ents
         if e.label_ in {"GPE", "LOC"}

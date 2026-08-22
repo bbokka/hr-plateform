@@ -24,7 +24,27 @@ def extract_text_from_cv(file_path: str) -> str:
 
     if ext == ".pdf":
         doc = pymupdf.open(file_path)
-        text = "\n".join(page.get_text() for page in doc)
+        page_texts = []
+        for page in doc:
+            # page.get_text() (plain "text" mode) concatenates every line
+            # into one flat stream with no blank-line separators -- even
+            # between two clearly distinct visual entries (e.g. two
+            # different certifications, or two different jobs) that are
+            # only set apart by vertical spacing/styling in the PDF layout,
+            # not by any actual blank line in the text itself. That makes
+            # it impossible for downstream section-grouping logic (see
+            # cv_parser.py's _group_section_into_entries) to tell where one
+            # CV entry ends and the next begins.
+            #
+            # "blocks" mode returns PyMuPDF's own detected visual text
+            # blocks (based on real position/spacing in the page layout).
+            # Joining distinct blocks with a blank line reintroduces the
+            # paragraph boundaries that plain-text mode discards, while
+            # keeping each block's own internal line breaks intact.
+            blocks = page.get_text("blocks")
+            block_texts = [b[4].rstrip() for b in blocks if b[4].strip()]
+            page_texts.append("\n\n".join(block_texts))
+        text = "\n\n".join(page_texts)
         doc.close()
         return _normalize_text(text)
 
